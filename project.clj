@@ -6,7 +6,7 @@
 ;;   the terms of this license.
 ;;   You must not remove this notice, or any other, from this software.
 
-(defproject dbda "0.2.0-SNAPSHOT"
+(defproject dbda "0.3.0-SNAPSHOT"
   :description "Doing Bayesian Data Analysis book on the GPU with Clojure, CUDA, and OpenCL"
   :author "Dragan Djuric"
   :url "http://github.com/dragandj/doing-bayesian-data-analysis-gpu"
@@ -15,7 +15,7 @@
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
   :dependencies [[org.clojure/clojure "1.9.0"]
-                 [uncomplicate/bayadera "0.2.0-SNAPSHOT"]]
+                 [uncomplicate/bayadera "0.3.0-SNAPSHOT"]]
 
   :profiles {:dev {:dependencies [[midje "1.9.1"]
                                   [org.clojure/data.csv "0.1.4"]]

@@ -14,20 +14,19 @@
             [uncomplicate.commons.core :refer [with-release]]
             [uncomplicate.fluokitten.core :refer [op]]
             [uncomplicate.neanderthal
-             [core :refer [row native scal!]]
+             [core :refer [row native scal! vctr]]
              [native :refer [fv]]]
             [uncomplicate.bayadera
-             [core :refer :all]
+             [core :refer [sampler dataset density distribution evidence sample!]]
+             [library :refer [beta likelihood]]
              [distributions :refer [beta-params binomial-lik-params]]
              [mcmc :refer [mix!]]
              [opencl :refer [with-default-bayadera]]]
             [uncomplicate.bayadera.internal.protocols :as p]
-            [uncomplicate.bayadera.opencl :refer [binomial-lik-model beta-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [scaling :refer [axis vector-axis]]
-             [plots :refer [render-sample]]]
-            [clojure.java.io :as io]))
+             [plots :refer [render-sample]]]))
 
 (def all-data (atom {}))
 (def plots (atom nil))
@@ -39,13 +38,15 @@
       (with-release [prior-dist (beta a b)
                      prior-sampler (sampler prior-dist)
                      prior-sample (dataset (sample! prior-sampler))
-                     prior-pdf (pdf prior-dist prior-sample)
-                     post (posterior (posterior-model binomial-lik-model beta-model))
-                     post-dist (post (fv (op (binomial-lik-params N z) (beta-params a b))))
+                     prior-pdf (density prior-dist prior-sample)
+                     binomial-lik (likelihood :binomial)
+                     coin-data (vctr prior-sample (binomial-lik-params N z))
+                     post (distribution "beta_binomial" binomial-lik prior-dist)
+                     post-dist (post coin-data)
                      post-sampler (time (doto (sampler post-dist) (mix!)))
                      post-sample (dataset (sample! post-sampler))
-                     post-pdf (scal! (/ 1.0 (evidence post-dist prior-sample))
-                                     (pdf post-dist post-sample))]
+                     post-pdf (scal! (/ 1.0 (evidence binomial-lik coin-data prior-sample))
+                                     (density post-dist post-sample))]
 
         {:prior {:sample (native (row (p/data prior-sample) 0))
                  :pdf (native prior-pdf)}

@@ -13,17 +13,17 @@
             [quil.middlewares.pause-on-error :refer [pause-on-error]]
             [uncomplicate.commons.core :refer [with-release let-release wrap-float]]
             [uncomplicate.neanderthal
-             [core :refer [row native dot imax imin scal! col submatrix]]
+             [core :refer [row native dot imax imin scal! col submatrix vctr]]
              [real :refer [entry entry!]]
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [distributions :refer [binomial-lik-params]]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
-             [mcmc :refer [mix! info anneal! burn-in! acc-rate! run-sampler!]]]
+             [mcmc :refer [mix! anneal! burn-in! acc-rate! run-sampler!]]]
             [uncomplicate.bayadera.internal.protocols :as p]
-            [uncomplicate.bayadera.opencl :refer [binomial-lik-model beta-source cl-distribution-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -32,27 +32,28 @@
 (def all-data (atom {}))
 (def state (atom nil))
 
-(def single-coin-model
-  (cl-distribution-model [beta-source
-                          (slurp (io/resource "dbda/ch09/single-coin.h"))]
-                         :name "single_coin" :params-size 3 :dimension 2 :limits (fge 2 2 [0 1 0 1])))
-
 (defn analysis []
   (with-default-bayadera
     (let [walker-count (* 256 44 32)
           sample-count (* 16 walker-count)
           z 9 N 12]
-      (with-release [prior (distribution single-coin-model)
+      (with-release [single-coin-model
+                     (library/distribution-model [:beta (slurp (io/resource "dbda/ch09/single-coin.h"))]
+                                                 {:name "single_coin" :params-size 3 :dimension 2
+                                                  :limits (fge 2 2 [0 1 0 1])})
+                     prior (distribution single-coin-model)
                      prior-dist (prior (fv 2 2 100))
                      prior-sampler (time (doto (sampler prior-dist) (mix! {:a 2.68})))
                      prior-sample (dataset (sample! prior-sampler sample-count))
-                     prior-pdf (pdf prior-dist prior-sample)
-                     post (posterior "posterior" binomial-lik-model prior-dist)
-                     post-dist (post (fv (binomial-lik-params N z)))
+                     prior-pdf (density prior-dist prior-sample)
+                     binomial-lik (library/likelihood :binomial)
+                     post (distribution "posterior" binomial-lik prior-dist)
+                     coin-data (vctr prior-sample (binomial-lik-params N z))
+                     post-dist (post coin-data)
                      post-sampler (time (doto (sampler post-dist) (mix!)))
                      post-sample (dataset (sample! post-sampler sample-count))
-                     post-pdf (scal! (/ 1.0 (evidence post-dist prior-sample))
-                                     (pdf post-dist post-sample))]
+                     post-pdf (scal! (/ 1.0 (evidence binomial-lik coin-data prior-sample))
+                                     (density post-dist post-sample))]
 
         {:prior {:sample (native (submatrix (p/data prior-sample) 0 0 2 walker-count))
                  :pdf (native prior-pdf)
