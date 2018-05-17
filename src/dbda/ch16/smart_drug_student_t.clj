@@ -20,11 +20,9 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [opencl :refer [with-default-bayadera]]
              [mcmc :refer [mix!]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source exponential-source cl-distribution-model
-                     student-t-lik-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -33,12 +31,6 @@
 
 (def all-data (atom {}))
 (def state (atom nil))
-
-(def smart-drug-prior
-  (cl-distribution-model [gaussian-source uniform-source exponential-source
-                          (slurp (io/resource "dbda/ch16/smart-drug-t.h"))]
-                         :name "smart_drug" :mcmc-logpdf "smart_drug_mcmc_logpdf" :params-size 5 :dimension 3))
-
 
 (let [in-file (slurp (io/resource "dbda/ch16/smart-drug.csv"))]
   (let [data (loop [s 0 p 0 data (drop 1 (csv/read-csv in-file))
@@ -57,20 +49,19 @@
 
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution smart-drug-prior)
+    (with-release [smart-drug-prior
+                   (library/distribution-model [:gaussian :uniform :exponential
+                                                (slurp (io/resource "dbda/ch16/smart-drug-student-t.cl"))]
+                                               {:name "smart_drug" :mcmc-logpdf "smart_drug_mcmc_logpdf"
+                                                :params-size 5 :dimension 3})
+                   prior (distribution smart-drug-prior)
                    prior-dist (prior (fv 10 100 60 0 100))
-                   smart-drug-post (posterior "smart_drug"
-                                              (student-t-lik-model (dim (:smart-drug params)))
-                                              prior-dist)
+                   smart-drug-post (distribution "smart_drug" (library/likelihood-model :student-t) prior-dist)
                    smart-drug-dist (smart-drug-post (:smart-drug params))
-                   smart-drug-sampler (sampler smart-drug-dist
-                                               {:limits (fge 2 3 [0 30 80 120 0 40])})
-                   placebo-post (posterior "placebo"
-                                           (student-t-lik-model (dim (:placebo params)))
-                                           prior-dist)
+                   smart-drug-sampler (sampler smart-drug-dist {:limits (fge 2 3 [0 30 80 120 0 40])})
+                   placebo-post (distribution "placebo" (library/likelihood-model :student-t) prior-dist)
                    placebo-dist (placebo-post (:placebo params))
-                   placebo-sampler (sampler placebo-dist
-                                            {:limits (fge 2 3 [0 30 80 120 0 40])})]
+                   placebo-sampler (sampler placebo-dist {:limits (fge 2 3 [0 30 80 120 0 40])})]
       (println (time (mix! smart-drug-sampler {:step 256})))
       (println (time (mix! placebo-sampler {:step 256})))
       {:smart-drug (histogram! smart-drug-sampler 10)

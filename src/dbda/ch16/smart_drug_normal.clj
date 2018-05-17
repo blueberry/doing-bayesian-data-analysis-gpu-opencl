@@ -11,7 +11,7 @@
   (:require [quil.core :as q]
             [quil.applet :as qa]
             [quil.middlewares.pause-on-error :refer [pause-on-error]]
-            [uncomplicate.commons.core :refer [with-release let-release wrap-float]]
+            [uncomplicate.commons.core :refer [with-release let-release wrap-float info]]
             [uncomplicate.fluokitten.core :refer [op]]
             [uncomplicate.neanderthal
              [core :refer [dim]]
@@ -20,10 +20,9 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [opencl :refer [with-default-bayadera]]
-             [mcmc :refer [mix! info]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source cl-distribution-model gaussian-lik-model]]
+             [mcmc :refer [mix!]]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -32,12 +31,6 @@
 
 (def all-data (atom {}))
 (def state (atom nil))
-
-(def smart-drug-prior
-  (cl-distribution-model [gaussian-source uniform-source
-                          (slurp (io/resource "dbda/ch16/smart-drug-normal.h"))]
-                         :name "smart_drug" :params-size 4 :dimension 2))
-
 
 (let [in-file (slurp (io/resource "dbda/ch16/smart-drug.csv"))]
   (let [data (loop [s 0 p 0 data (drop 1 (csv/read-csv in-file))
@@ -56,20 +49,25 @@
 
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution smart-drug-prior)
-                   prior-dist (prior (fv 100 60 0 100))
-                   smart-drug-post (posterior "smart_drug" (gaussian-lik-model (dim (:smart-drug params))) prior-dist)
-                   smart-drug-dist (smart-drug-post (:smart-drug params))
-                   smart-drug-sampler (sampler smart-drug-dist {:limits (fge 2 2 [80 120 0 40])})
-                   placebo-post (posterior "placebo" (gaussian-lik-model (dim (:placebo params))) prior-dist)
-                   placebo-dist (placebo-post (:placebo params))
-                   placebo-sampler (sampler placebo-dist {:limits (fge 2 2 [80 120 0 40])})]
-      (println (time (mix! smart-drug-sampler {:step 128})))
-      (println (info smart-drug-sampler))
-      (println (time (mix! placebo-sampler {:step 128})))
-      (println (info placebo-sampler))
-      {:smart-drug (histogram! smart-drug-sampler 10)
-       :placebo (histogram! placebo-sampler 10)})))
+    (let [gaussian-lik-model (library/likelihood-model :gaussian)]
+      (with-release [smart-drug-prior
+                     (library/distribution-model [:gaussian :uniform
+                                                  (slurp (io/resource "dbda/ch16/smart-drug-normal.cl"))]
+                                                 {:name "smart_drug" :params-size 4 :dimension 2})
+                     prior (distribution smart-drug-prior)
+                     prior-dist (prior (fv 100 60 0 100))
+                     smart-drug-post (distribution "smart_drug" gaussian-lik-model prior-dist)
+                     smart-drug-dist (smart-drug-post (:smart-drug params))
+                     smart-drug-sampler (sampler smart-drug-dist {:limits (fge 2 2 [80 120 0 40])})
+                     placebo-post (distribution "placebo" gaussian-lik-model prior-dist)
+                     placebo-dist (placebo-post (:placebo params))
+                     placebo-sampler (sampler placebo-dist {:limits (fge 2 2 [80 120 0 40])})]
+        (println (time (mix! smart-drug-sampler {:step 128})))
+        (println (info smart-drug-sampler))
+        (println (time (mix! placebo-sampler {:step 128})))
+        (println (info placebo-sampler))
+        {:smart-drug (histogram! smart-drug-sampler 10)
+         :placebo (histogram! placebo-sampler 10)}))))
 
 (defn setup []
   (reset! state
