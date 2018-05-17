@@ -20,13 +20,10 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
              [mcmc :refer [mix! burn-in! pow-n acc-rate! run-sampler!]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source exponential-source student-t-source
-                     cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -37,10 +34,10 @@
 (def state (atom nil))
 
 (defn read-data [in-file]
-  (loop [c 0 data (drop 1 (csv/read-csv in-file)) acc (transient [])]
+  (loop [data (drop 1 (csv/read-csv in-file)) acc (transient [])]
     (if data
       (let [[longevity group thorax] (first data)]
-        (recur (inc c) (next data)
+        (recur (next data)
                (-> acc
                    (conj! (case group
                             "None0" 0
@@ -50,7 +47,7 @@
                             "Virgin8" 4))
                    (conj! (double (read-string thorax)))
                    (conj! (double (read-string longevity))))))
-      (fv (op [c] (persistent! acc))))))
+      (fv (persistent! acc)))))
 
 (def ff-data (read-data (slurp (io/resource "dbda/ch19/fruitfly-data-reduced.csv"))))
 (def ff-matrix (fge 3 (first ff-data) (drop 1 ff-data)))
@@ -59,16 +56,16 @@
 (def x-sd (double (sd (row ff-matrix 1))))
 (def params (fv (op [(mean (row ff-matrix 1))] ff-data)))
 
-(def ff-prior
-  (cl-distribution-model [gaussian-source uniform-source (slurp (io/resource "dbda/ch19/fruitfly.h"))]
-                         :name "ff" :mcmc-logpdf "ff_mcmc_logpdf" :params-size 11 :dimension 8))
-
-(defn ff-likelihood [n]
-  (likelihood-model (slurp (io/resource "dbda/ch19/fruitfly.h")) :name "ff" :params-size n))
-
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution ff-prior)
+    (with-release [ff-prior
+                   (library/distribution-model [:gaussian :uniform (slurp (io/resource "dbda/ch19/fruitfly.cl"))]
+                                               {:name "ff" :mcmc-logpdf "ff_mcmc_logpdf"
+                                                :params-size 11 :dimension 8})
+                   ff-likelihood
+                   (library/likelihood-model (slurp (io/resource "dbda/ch19/fruitfly.cl"))
+                                             {:name "ff"})
+                   prior (distribution ff-prior)
                    prior-dist (prior (fv (op [(/ y-sd 100.0) (* y-sd 10.0)
                                               y-mean (* y-sd 5)]
                                              (vec (repeat 5 (* y-sd 5)))
@@ -77,7 +74,7 @@
                                           {:limits (fge 2 8 (op [0 150 0 100]
                                                                 (vec (take 10 (cycle [-20 50])))
                                                                 [-500 500]))})
-                   post (posterior "ff" (ff-likelihood  (dim params)) prior-dist)
+                   post (distribution "ff" ff-likelihood prior-dist)
                    post-dist (post params)
                    post-sampler (sampler post-dist {:position prior-dist
                                                     :limits (fge 2 8 (op [0 150 0 100]
