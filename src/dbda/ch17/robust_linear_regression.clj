@@ -11,7 +11,7 @@
   (:require [quil.core :as q]
             [quil.applet :as qa]
             [quil.middlewares.pause-on-error :refer [pause-on-error]]
-            [uncomplicate.commons.core :refer [with-release]]
+            [uncomplicate.commons.core :refer [with-release info]]
             [uncomplicate.fluokitten.core :refer [op]]
             [uncomplicate.clojurecl.core :refer [finish!]]
             [uncomplicate.neanderthal
@@ -19,11 +19,9 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [opencl :refer [with-default-bayadera]]
              [mcmc :refer [mix!]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source exponential-source student-t-source cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -46,29 +44,27 @@
 (def params-30 (fv (read-data (slurp (io/resource "dbda/ch17/ht-wt-data-30.csv")))))
 (def params-300 (fv (read-data (slurp (io/resource "dbda/ch17/ht-wt-data-300.csv")))))
 
-(def rlr-prior
-  (cl-distribution-model [gaussian-source uniform-source exponential-source student-t-source
-                          (slurp (io/resource "dbda/ch17/robust-linear-regression.h"))]
-                         :name "rlr" :mcmc-logpdf "rlr_mcmc_logpdf" :params-size 7 :dimension 4))
-
-(defn rlr-likelihood [n]
-  (likelihood-model (slurp (io/resource "dbda/ch17/robust-linear-regression.h"))
-                       :name "rlr" :params-size n))
-
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution rlr-prior)
+    (with-release [rlr-prior
+                   (library/distribution-model [:gaussian :uniform :exponential :student-t
+                                                (slurp (io/resource "dbda/ch17/robust-linear-regression.cl"))]
+                                               {:name "rlr" :mcmc-logpdf "rlr_mcmc_logpdf"
+                                                :params-size 7 :dimension 4})
+                   rlr-likelihood
+                   (library/likelihood-model (slurp (io/resource "dbda/ch17/robust-linear-regression.cl"))
+                                             {:name "rlr"})
+                   prior (distribution rlr-prior)
                    prior-dist (prior (fv 10 -100 100 5 10 0.001 1000))
                    prior-sampler (sampler prior-dist {:walkers 22528 :limits (fge 2 4 [1 20 -400 100 0 20 0.01 100])})
-                   post-30 (posterior "rlr_30" (rlr-likelihood (dim params-30)) prior-dist)
-                   post-30-dist (post-30 params-30)
+                   post (distribution "rlr" rlr-likelihood prior-dist)
+                   post-30-dist (post params-30)
                    post-30-sampler (sampler post-30-dist {:limits (fge 2 4 [1 20 -400 100 0 20 0.01 100])})
-                   post-300 (posterior "rlr_300" (rlr-likelihood (dim params-300)) prior-dist)
-                   post-300-dist (post-300 params-300)
+                   post-300-dist (post params-300)
                    post-300-sampler (sampler post-300-dist {:limits (fge 2 4 [1 10 -400 100 0 20 0.01 100])})]
       (println (time (mix! post-30-sampler {:step 128})))
       (println (time (mix! post-300-sampler {:step 384})))
-      (println (uncomplicate.bayadera.mcmc/info post-300-sampler))
+      (println (info post-300-sampler))
       [(histogram! post-30-sampler 1000)
        (histogram! post-300-sampler 1000)])))
 

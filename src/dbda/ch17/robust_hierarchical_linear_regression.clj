@@ -20,13 +20,10 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
              [mcmc :refer [mix! burn-in! pow-n acc-rate! run-sampler!]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source exponential-source student-t-source
-                     cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -53,20 +50,19 @@
 
 (def params (fv (read-data (slurp (io/resource "dbda/ch17/hier-lin-regress-data.csv")))))
 
-(def rhlr-prior
-  (cl-distribution-model [gaussian-source uniform-source exponential-source student-t-source
-                          (slurp (io/resource "dbda/ch17/robust-hierarchical-linear-regression.h"))]
-                         :name "rhlr" :mcmc-logpdf "rhlr_mcmc_logpdf" :params-size 103 :dimension 52))
-
-(defn rhlr-likelihood [n]
-  (likelihood-model (slurp (io/resource "dbda/ch17/robust-hierarchical-linear-regression.h"))
-                       :name "rhlr" :params-size n))
-
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution rhlr-prior)
+    (with-release [rhlr-prior
+                   (library/distribution-model [:gaussian :uniform :exponential :student-t
+                                           (slurp (io/resource "dbda/ch17/robust-hierarchical-linear-regression.cl"))]
+                                          {:name "rhlr" :mcmc-logpdf "rhlr_mcmc_logpdf"
+                                           :params-size 103 :dimension 52})
+                   rhlr-likelihood
+                   (library/likelihood-model (slurp (io/resource "dbda/ch17/robust-hierarchical-linear-regression.cl"))
+                                             {:name "rhlr"})
+                   prior (distribution rhlr-prior)
                    prior-dist (prior (fv (op [4 0.01 1000] (take 100 (cycle [0 100 3 10])))))
-                   post (posterior "rhlr" (rhlr-likelihood (dim params)) prior-dist)
+                   post (distribution "rhlr" rhlr-likelihood prior-dist)
                    post-dist (post params)
                    post-sampler (sampler post-dist {:limits (fge 2 52 (op [2 20 0.001 100] (take 100 (interleave (repeat -100) (repeat 100) (repeat -3) (repeat 9)))))})]
       (println (time (mix! post-sampler {:dimension-power 0.2 :cooling-schedule (pow-n 4)})))

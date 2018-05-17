@@ -11,7 +11,7 @@
   (:require [quil.core :as q]
             [quil.applet :as qa]
             [quil.middlewares.pause-on-error :refer [pause-on-error]]
-            [uncomplicate.commons.core :refer [with-release let-release wrap-float]]
+            [uncomplicate.commons.core :refer [with-release let-release wrap-float info]]
             [uncomplicate.fluokitten.core :refer [op fmap]]
             [uncomplicate.neanderthal
              [core :refer [dim]]
@@ -20,13 +20,10 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
-             [mcmc :refer [mix! burn-in! pow-n acc-rate! info run-sampler!]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source exponential-source student-t-source
-                     cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
+             [mcmc :refer [mix! burn-in! pow-n acc-rate! run-sampler!]]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -52,21 +49,21 @@
 
 (def params (fv (read-data (slurp (io/resource "dbda/ch17/income-famz-state.csv")))))
 
-(def qt-prior
-  (cl-distribution-model [gaussian-source uniform-source exponential-source student-t-source
-                          (slurp (io/resource "dbda/ch17/quadratic-trend.h"))]
-                         :name "qt" :mcmc-logpdf "qt_mcmc_logpdf" :params-size 315 :dimension 158))
-
-(defn qt-likelihood [n]
-  (likelihood-model (slurp (io/resource "dbda/ch17/quadratic-trend.h")) :name "qt" :params-size n))
-
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution qt-prior)
+    (with-release [qt-prior
+                   (library/distribution-model [:gaussian :uniform :exponential :student-t
+                                                (slurp (io/resource "dbda/ch17/quadratic-trend.cl"))]
+                                               {:name "qt" :mcmc-logpdf "qt_mcmc_logpdf"
+                                                :params-size 315 :dimension 158})
+                   qt-likelihood (library/likelihood-model (slurp (io/resource "dbda/ch17/quadratic-trend.cl"))
+                                                           {:name "qt"})
+                   prior (distribution qt-prior)
                    prior-dist (prior (fv (op [4 10000 20000] (take 312 (cycle [10000 10000 20000 5000 -1000 1000])))))
-                   post (posterior "qt" (qt-likelihood (dim params)) prior-dist)
+                   post (distribution "qt" qt-likelihood prior-dist)
                    post-dist (post params)
-                   post-sampler (sampler post-dist {:walkers (* 44 256) :limits (fge 2 158 (op [2 10 10000 20000] (take 312 (interleave (repeat 0) (repeat 2000) (repeat 10000) (repeat 30000) (repeat -2000) (repeat 0)))))})]
+                   post-sampler (sampler post-dist {:walkers (* 44 256)
+                                                    :limits (fge 2 158 (op [2 10 10000 20000] (take 312 (interleave (repeat 0) (repeat 2000) (repeat 10000) (repeat 30000) (repeat -2000) (repeat 0)))))})]
       (println (time (mix! post-sampler {:dimension-power 0.2 :cooling-schedule (pow-n 4)})))
       (println (info post-sampler))
       (println (time (do (burn-in! post-sampler 10000) (acc-rate! post-sampler))))
