@@ -20,13 +20,10 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
              [mcmc :refer [mix! burn-in! pow-n acc-rate! run-sampler!]]]
-            [uncomplicate.bayadera.opencl
-             :refer [gaussian-source uniform-source exponential-source student-t-source
-                     cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -37,32 +34,32 @@
 (def state (atom nil))
 
 (defn read-data [in-file]
-  (loop [c 0 data (drop 1 (csv/read-csv in-file)) res (transient [])]
+  (loop [data (drop 1 (csv/read-csv in-file)) res (transient [])]
     (if data
       (let [[_ spend _ _ prcnt-take _ _ satt] (first data)]
-        (recur (inc c) (next data)
+        (recur (next data)
                (-> res
                    (conj! (double (read-string spend)))
                    (conj! (double (read-string prcnt-take)))
                    (conj! (double (read-string satt))))))
-      (fv (op [c] (persistent! res))))))
+      (fv (persistent! res)))))
 
-(def params (fv (read-data (slurp (io/resource "dbda/ch18/sat-spending.csv")))))
-
-(def mlr-prior
-  (cl-distribution-model [gaussian-source uniform-source exponential-source student-t-source
-                          (slurp (io/resource "dbda/ch18/multiple-linear-regression.h"))]
-                         :name "mlr" :mcmc-logpdf "mlr_mcmc_logpdf" :params-size 9 :dimension 5))
-
-(defn rhlr-likelihood [n]
-  (likelihood-model (slurp (io/resource "dbda/ch18/multiple-linear-regression.h")) :name "mlr" :params-size n))
+(def data (fv (read-data (slurp (io/resource "dbda/ch18/sat-spending.csv")))))
 
 (defn analysis []
   (with-default-bayadera
-    (with-release [prior (distribution mlr-prior)
+    (with-release [mlr-prior
+                   (library/distribution-model [:gaussian :uniform :exponential :student-t
+                                                (slurp (io/resource "dbda/ch18/multiple-linear-regression.cl"))]
+                                               {:name "mlr" :mcmc-logpdf "mlr_mcmc_logpdf"
+                                                :params-size 9 :dimension 5})
+                   rhlr-likelihood
+                   (library/likelihood-model (slurp (io/resource "dbda/ch18/multiple-linear-regression.cl"))
+                                             {:name "mlr"})
+                   prior (distribution mlr-prior)
                    prior-dist (prior (fv [26 0.001 1000 1000 500 0 20 0 5]))
-                   post (posterior "mlr" (rhlr-likelihood (dim params)) prior-dist)
-                   post-dist (post params)
+                   post (distribution "mlr" rhlr-likelihood prior-dist)
+                   post-dist (post data)
                    post-sampler (sampler post-dist {:limits (fge 2 5 [1 30 0.001 1000 0 2000 -20 20 -5 5])})]
       (println (time (mix! post-sampler {:cooling-schedule (pow-n 2)})))
       (println (time (do (burn-in! post-sampler 1000) (acc-rate! post-sampler))))
