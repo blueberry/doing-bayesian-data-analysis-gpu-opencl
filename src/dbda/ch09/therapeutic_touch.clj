@@ -11,7 +11,7 @@
   (:require [quil.core :as q]
             [quil.applet :as qa]
             [quil.middlewares.pause-on-error :refer [pause-on-error]]
-            [uncomplicate.commons.core :refer [with-release let-release wrap-float]]
+            [uncomplicate.commons.core :refer [with-release let-release wrap-float info]]
             [uncomplicate.fluokitten.core :refer [op]]
             [uncomplicate.neanderthal
              [core :refer [row native dot imax imin scal! col submatrix transfer]]
@@ -19,11 +19,10 @@
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
-             [mcmc :refer [mix! info]]]
-            [uncomplicate.bayadera.opencl :refer [cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
+             [mcmc :refer [mix!]]]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -34,17 +33,6 @@
 (def state (atom nil))
 
 (def subjects 28)
-
-(def touch-prior
-  (cl-distribution-model [(slurp (io/resource "uncomplicate/bayadera/internal/opencl/distributions/beta.h"))
-                          (slurp (io/resource "uncomplicate/bayadera/internal/opencl/distributions/gamma.h"))
-                          (slurp (io/resource "dbda/ch09/therapeutic-touch.h"))]
-                         :name "touch" :params-size 4 :dimension (+ subjects 2)))
-
-(def touch-likelihood
-  (likelihood-model [(slurp (io/resource "uncomplicate/bayadera/internal/opencl/distributions/binomial.h"))
-                     (slurp (io/resource "dbda/ch09/therapeutic-touch-lik.h"))]
-                    :name "touch" :params-size (* subjects 2)))
 
 (let [in-file (slurp (io/resource "dbda/ch09/therapeutic-touch-data.csv"))]
   (def params (fv (seq (reduce (fn [^ints acc [b c]]
@@ -58,13 +46,21 @@
 (defn analysis []
   (with-default-bayadera
     (let [walker-count (* 256 44)]
-      (with-release [limits (fge 2 (+ subjects 2)
+      (with-release [touch-prior
+                     (library/distribution-model [:beta :gamma
+                                                  (slurp (io/resource "dbda/ch09/therapeutic-touch.cl"))]
+                                                 {:name "touch" :params-size 4 :dimension (+ subjects 2)})
+                     touch-likelihood
+                     (library/likelihood-model [:binomial
+                                                (slurp (io/resource "dbda/ch09/therapeutic-touch-lik.cl"))]
+                                               {:name "touch"})
+                     limits (fge 2 (+ subjects 2)
                                  (op (take (+ 2 (* subjects 2))
                                            (interleave (repeat 0) (repeat 1)))
                                      [0 30]))
                      prior (distribution touch-prior)
                      prior-dist (prior (fv 1 1 1.105125 1.105125))
-                     post (posterior "touch" touch-likelihood prior-dist)
+                     post (distribution "touch" touch-likelihood prior-dist)
                      post-dist (post (fv (take (* subjects 2) params)))
                      post-sampler (sampler post-dist {:walkers walker-count :limits limits})]
         (println (time (mix! post-sampler {:refining 20})))

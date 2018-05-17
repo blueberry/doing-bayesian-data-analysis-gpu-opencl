@@ -1,4 +1,5 @@
-inline REAL multiple_coins_logpdf(const REAL* params, REAL* x) {
+inline REAL multiple_coins_logpdf(const uint data_len, const uint hyperparams_len, const REAL* params,
+                                  const uint dim, REAL* x) {
     const REAL a = params[0];
     const REAL b = params[1];
     const REAL k = params[2];

@@ -38,7 +38,7 @@
           sample-count (* 16 walker-count)
           z 9 N 12]
       (with-release [single-coin-model
-                     (library/distribution-model [:beta (slurp (io/resource "dbda/ch09/single-coin.h"))]
+                     (library/distribution-model [:beta (slurp (io/resource "dbda/ch09/single-coin.cl"))]
                                                  {:name "single_coin" :params-size 3 :dimension 2
                                                   :limits (fge 2 2 [0 1 0 1])})
                      prior (distribution single-coin-model)

@@ -13,16 +13,16 @@
             [quil.middlewares.pause-on-error :refer [pause-on-error]]
             [uncomplicate.commons.core :refer [with-release let-release wrap-float]]
             [uncomplicate.neanderthal
-             [core :refer [row native dot imax imin scal! col submatrix]]
+             [core :refer [row native dot imax imin scal! col submatrix vctr]]
              [real :refer [entry entry!]]
              [native :refer [fv fge]]]
             [uncomplicate.bayadera
              [core :refer :all]
+             [library :as library]
              [util :refer [bin-mapper hdi]]
              [opencl :refer [with-default-bayadera]]
-             [mcmc :refer [mix! info anneal! burn-in! acc-rate! run-sampler!]]]
-            [uncomplicate.bayadera.opencl :refer [cl-distribution-model]]
-            [uncomplicate.bayadera.internal.models :refer [likelihood-model]]
+             [mcmc :refer [mix! anneal! burn-in! acc-rate! run-sampler!]]]
+            [uncomplicate.bayadera.internal.protocols :as p]
             [uncomplicate.bayadera.toolbox
              [processing :refer :all]
              [plots :refer [render-sample render-histogram]]]
@@ -31,40 +31,40 @@
 (def all-data (atom {}))
 (def state (atom nil))
 
-(def multiple-coins-prior
-  (cl-distribution-model [(slurp (io/resource "uncomplicate/bayadera/internal/opencl/distributions/beta.h"))
-                          (slurp (io/resource "dbda/ch09/multiple-coins.h"))]
-                         :name "multiple_coins" :params-size 3 :dimension 3
-                         :limits (fge 2 3 [0 1 0 1 0 1])))
-
-(def multiple-coins-likelihood
-  (likelihood-model [(slurp (io/resource "uncomplicate/bayadera/internal/opencl/distributions/binomial.h"))
-                     (slurp (io/resource "dbda/ch09/multiple-coins-lik.h"))]
-                    :name "multiple_coins" :params-size 4))
-
 (defn analysis []
   (with-default-bayadera
     (let [walker-count (* 256 44 32)
           sample-count (* 16 walker-count)
           z0 3 N0 15
           z1 4 N1 5]
-      (with-release [prior (distribution multiple-coins-prior)
+      (with-release [multiple-coins-prior
+                     (library/distribution-model [:beta (slurp (io/resource "dbda/ch09/multiple-coins.cl"))]
+                                                 {:name "multiple_coins" :params-size 3 :dimension 3
+                                                  :limits (fge 2 3 [0 1 0 1 0 1])})
+                     multiple-coins-likelihood-model
+                     (library/likelihood-model [:binomial (slurp (io/resource "dbda/ch09/multiple-coins-lik.cl"))]
+                                               {:name "multiple_coins" :params-size 4})
+                     prior (distribution multiple-coins-prior)
                      prior-dist-5 (prior (fv 2 2 5))
                      prior-sampler-5 (time (doto (sampler prior-dist-5) (mix!)))
+                     prior-sample-5 (dataset (sample prior-sampler-5))
                      prior-dist-75 (prior (fv 2 2 75))
                      prior-sampler-75 (time (doto (sampler prior-dist-75) (mix!)))
+                     prior-sample-75 (dataset (sample prior-sampler-75))
+                     multiple-coins-likelihood (likelihood multiple-coins-likelihood-model)
                      post-model (posterior-model multiple-coins-likelihood multiple-coins-prior)
-                     post (posterior post-model)
-                     post-dist-5 (post (fv N0 z0 N1 z1 2 2 5))
+                     post (distribution post-model)
+                     coin-data (vctr prior-sample-5 N0 z0 N1 z1)
+                     post-dist-5 (post coin-data (fv 2 2 5))
                      post-sampler-5 (time (doto (sampler post-dist-5) (mix!)))
                      post-sample-5 (dataset (sample post-sampler-5))
-                     post-dist-75 (post (fv N0 z0 N1 z1 2 2 75))
+                     post-dist-75 (post coin-data (fv 2 2 75))
                      post-sampler-75 (time (doto (sampler post-dist-75) (mix!)))
                      post-sample-75 (dataset (sample post-sampler-75))]
 
         (println "Bayes Factor p(D|k=5)/p(D|k=75) = "
-                 (/ (evidence post-dist-5 post-sample-5)
-                    (evidence post-dist-75 post-sample-75)))
+                 (/ (evidence multiple-coins-likelihood coin-data prior-sample-5)
+                    (evidence multiple-coins-likelihood coin-data prior-sample-75)))
 
         {:prior-5 (histogram prior-sampler-5)
          :prior-75 (histogram prior-sampler-75)
