@@ -14,11 +14,11 @@
         :url "http://github.com/dragandj/doing-bayesian-data-analysis-gpu"}
   :license {:name "Eclipse Public License"
             :url "http://www.eclipse.org/legal/epl-v10.html"}
-  :dependencies [[org.clojure/clojure "1.9.0"]
-                 [uncomplicate/bayadera "0.3.0-SNAPSHOT"]]
+  :dependencies [[org.clojure/clojure "1.10.0"]
+                 [uncomplicate/bayadera "0.3.0-SNAPSHOT"]
+                 [org.clojure/data.csv "0.1.4"]]
 
-  :profiles {:dev {:dependencies [[midje "1.9.1"]
-                                  [org.clojure/data.csv "0.1.4"]]
+  :profiles {:dev {:dependencies [[midje "1.9.4"]]
                    :plugins [[lein-midje "3.2.1"]]
                    :global-vars {*warn-on-reflection* true
                                  *print-length* 16}
