@@ -94,3 +94,11 @@
     :setup setup
     :draw draw
     :middleware [pause-on-error]))
+
+;; This is how to run it:
+;; 1. Display empty window (preferrably spanning the screen)
+#_(display-sketch)
+;; 2. Run the analysis to populate the data that the plots draw
+#_(reset! all-data (analysis))
+;; It is awkward, but I was constrained by how quil and processing
+;; manage display.

@@ -17,7 +17,7 @@
              [core :refer [row native scal! vctr]]
              [native :refer [fv]]]
             [uncomplicate.bayadera
-             [core :refer [sampler dataset density distribution evidence sample!]]
+             [core :refer [sampler dataset density distribution evidence sample]]
              [library :refer [beta likelihood]]
              [distributions :refer [beta-params binomial-lik-params]]
              [mcmc :refer [mix!]]
@@ -37,14 +37,14 @@
           z 15 N 50]
       (with-release [prior-dist (beta a b)
                      prior-sampler (sampler prior-dist)
-                     prior-sample (dataset (sample! prior-sampler))
+                     prior-sample (dataset (sample prior-sampler))
                      prior-pdf (density prior-dist prior-sample)
                      binomial-lik (likelihood :binomial)
                      coin-data (vctr prior-sample (binomial-lik-params N z))
                      post (distribution "beta_binomial" binomial-lik prior-dist)
                      post-dist (post coin-data)
                      post-sampler (time (doto (sampler post-dist) (mix!)))
-                     post-sample (dataset (sample! post-sampler))
+                     post-sample (dataset (sample post-sampler))
                      post-pdf (scal! (/ 1.0 (evidence binomial-lik coin-data prior-sample))
                                      (density post-dist post-sample))]
 
@@ -78,3 +78,11 @@
     :setup setup
     :draw draw
     :middleware [pause-on-error]))
+
+;; This is how to run it:
+;; 1. Display empty window (preferrably spanning the screen)
+#_(display-sketch)
+;; 2. Run the analysis to populate the data that the plots draw
+#_(reset! all-data (analysis))
+;; It is awkward, but I was constrained by how quil and processing
+;; manage display.

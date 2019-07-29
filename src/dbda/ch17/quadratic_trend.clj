@@ -62,12 +62,12 @@
                    prior-dist (prior (fv (op [4 10000 20000] (take 312 (cycle [10000 10000 20000 5000 -1000 1000])))))
                    post (distribution "qt" qt-likelihood prior-dist)
                    post-dist (post params)
-                   post-sampler (sampler post-dist {:walkers (* 44 256)
+                   post-sampler (sampler post-dist {:walkers (* 64 256)
                                                     :limits (fge 2 158 (op [2 10 10000 20000] (take 312 (interleave (repeat 0) (repeat 2000) (repeat 10000) (repeat 30000) (repeat -2000) (repeat 0)))))})]
       (println (time (mix! post-sampler {:dimension-power 0.2 :cooling-schedule (pow-n 4)})))
       (println (info post-sampler))
-      (println (time (do (burn-in! post-sampler 10000) (acc-rate! post-sampler))))
-      (println (time (run-sampler! post-sampler 64)))
+      #_(println (time (do (burn-in! post-sampler 10000) (acc-rate! post-sampler))))
+      #_(println (time (run-sampler! post-sampler 64)))
       (time (histogram! post-sampler 500)))))
 
 (defn setup []
@@ -100,3 +100,11 @@
     :setup setup
     :draw draw
     :middleware [pause-on-error]))
+
+;; This is how to run it:
+;; 1. Display empty window (preferrably spanning the screen)
+#_(display-sketch)
+;; 2. Run the analysis to populate the data that the plots draw
+#_(reset! all-data (analysis))
+;; It is awkward, but I was constrained by how quil and processing
+;; manage display.

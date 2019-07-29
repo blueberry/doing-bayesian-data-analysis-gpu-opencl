@@ -84,6 +84,8 @@
       (println (time (mix! post-sampler {:cooling-schedule (pow-n 1.5)})))
       (time (histogram! post-sampler 100)))))
 
+
+;; TODO It does not mix well by default. I'd have to revisit this example.
 #_(defn setup []
   (reset! state
           {:data @all-data

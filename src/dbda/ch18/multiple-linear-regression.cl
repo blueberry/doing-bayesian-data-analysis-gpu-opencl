@@ -22,7 +22,7 @@ REAL mlr_loglik(const uint data_len, const REAL* data, const uint dim, const REA
 }
 
 REAL mlr_mcmc_logpdf(const uint data_len, const uint hyperparams_len, const REAL* params,
-                     const uint dim, REAL* x) {
+                     const uint dim, const REAL* x) {
     const bool valid = (1.0f < x[0]);
     if (valid) {
         REAL logp = exponential_log_unscaled(params[0], x[0] - 1)
@@ -36,7 +36,7 @@ REAL mlr_mcmc_logpdf(const uint data_len, const uint hyperparams_len, const REAL
 }
 
 REAL mlr_logpdf(const uint data_len, const uint hyperparams_len, const REAL* params,
-                const uint dim, REAL* x) {
+                const uint dim, const REAL* x) {
     bool valid = (1.0f < x[0]);
     if (valid) {
         REAL logp = exponential_log(params[0], x[0] - 1)

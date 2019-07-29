@@ -44,14 +44,14 @@
                      prior (distribution single-coin-model)
                      prior-dist (prior (fv 2 2 100))
                      prior-sampler (time (doto (sampler prior-dist) (mix! {:a 2.68})))
-                     prior-sample (dataset (sample! prior-sampler sample-count))
+                     prior-sample (dataset (sample prior-sampler sample-count))
                      prior-pdf (density prior-dist prior-sample)
                      binomial-lik (library/likelihood :binomial)
                      post (distribution "posterior" binomial-lik prior-dist)
                      coin-data (vctr prior-sample (binomial-lik-params N z))
                      post-dist (post coin-data)
                      post-sampler (time (doto (sampler post-dist) (mix!)))
-                     post-sample (dataset (sample! post-sampler sample-count))
+                     post-sample (dataset (sample post-sampler sample-count))
                      post-pdf (scal! (/ 1.0 (evidence binomial-lik coin-data prior-sample))
                                      (density post-dist post-sample))]
 
@@ -92,3 +92,11 @@
     :setup setup
     :draw draw
     :middleware [pause-on-error]))
+
+;; This is how to run it:
+;; 1. Display empty window (preferrably spanning the screen)
+#_(display-sketch)
+;; 2. Run the analysis to populate the data that the plots draw
+#_(reset! all-data (analysis))
+;; It is awkward, but I was constrained by how quil and processing
+;; manage display.
